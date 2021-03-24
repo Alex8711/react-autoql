@@ -29,7 +29,7 @@ import { Icon } from '../Icon'
 import { OptionsToolbar } from '../OptionsToolbar'
 import ErrorBoundary from '../../containers/ErrorHOC/ErrorHOC'
 
-import { CHART_TYPES, MAX_ROW_LIMIT } from '../../js/Constants.js'
+import { CHART_TYPES } from '../../js/Constants.js'
 import {
   getDefaultDisplayType,
   isTableType,
@@ -202,42 +202,9 @@ export default class ChatMessage extends React.Component {
     this.setState({ supportedDisplayTypes })
   }
 
-  setFilterTags = ({ isFilteringTable } = {}) => {
-    const tableRef =
-      this.state.displayType === 'pivot_table'
-        ? _get(this.responseRef, 'pivotTableRef.ref.table')
-        : _get(this.responseRef, 'tableRef.ref.table')
-
-    if (!tableRef) {
-      return
-    }
-
-    const filterValues = tableRef.getHeaderFilters()
-    if (filterValues) {
-      filterValues.forEach((filter) => {
-        try {
-          if (!isFilteringTable) {
-            const filterTagEl = document.createElement('span')
-            filterTagEl.innerText = 'F'
-            filterTagEl.setAttribute('class', 'filter-tag')
-
-            const columnTitleEl = document.querySelector(
-              `#message-${this.props.id} .tabulator-col[tabulator-field="${filter.field}"] .tabulator-col-title`
-            )
-            columnTitleEl.insertBefore(filterTagEl, columnTitleEl.firstChild)
-          } else if (isFilteringTable) {
-            var filterTagEl = document.querySelector(
-              `#message-${this.props.id} .tabulator-col[tabulator-field="${filter.field}"] .filter-tag`
-            )
-            if (filterTagEl) {
-              filterTagEl.parentNode.removeChild(filterTagEl)
-            }
-          }
-        } catch (error) {
-          console.error(error)
-          this.props.onErrorCallback(error)
-        }
-      })
+  setFilterTags = () => {
+    if (this.optionsToolbarRef) {
+      this.optionsToolbarRef.setFilterTags({ isFilteringTable: false })
     }
   }
 
@@ -293,17 +260,15 @@ export default class ChatMessage extends React.Component {
     return errorMessages.GENERAL_QUERY
   }
 
-  toggleTableFilter = () => {
+  toggleTableFilter = (isFiltering) => {
     // We want to do this without updating the component for performance reasons
     // and so the component doesnt re-render and reset scroll values
-    this.filtering = !this.filtering
-
     try {
       const messageElement = document.querySelector(
         `#message-${this.props.id}.response`
       )
 
-      if (this.filtering) {
+      if (isFiltering) {
         messageElement.style.maxHeight = 'calc(85% + 35px)'
         messageElement.style.height = `${messageElement.offsetHeight + 35}px`
         this.scrollIntoView()
@@ -366,6 +331,18 @@ export default class ChatMessage extends React.Component {
     return null
   }
 
+  onDisplayTypeChange = (displayType) => {
+    // Reset table filters when display type is changed
+    this.toggleTableFilter(false)
+    this.setFilterTags()
+    if (this.optionsToolbarRef) {
+      this.optionsToolbarRef.filtering = false
+    }
+
+    // Then switch to the appropriate view
+    this.switchView(displayType)
+  }
+
   renderLeftToolbar = () => {
     let displayType = this.state.displayType
 
@@ -383,7 +360,7 @@ export default class ChatMessage extends React.Component {
           className="chat-message-toolbar left"
           supportedDisplayTypes={this.state.supportedDisplayTypes || []}
           displayType={displayType}
-          onDisplayTypeChange={this.switchView}
+          onDisplayTypeChange={this.onDisplayTypeChange}
           disableCharts={this.state.disableChartingOptions}
         />
       )
@@ -454,12 +431,15 @@ export default class ChatMessage extends React.Component {
   }
 
   renderDataLimitWarning = () => {
-    if (_get(this.props, 'response.data.data.rows.length') === MAX_ROW_LIMIT) {
+    const numRows = _get(this.props, 'response.data.data.rows.length')
+    const maxRowLimit = _get(this.props, 'response.data.data.row_limit')
+
+    if (maxRowLimit && numRows === maxRowLimit) {
       return (
         <Icon
           type="warning"
           className="data-limit-warning-icon"
-          data-tip="The display limit for your data has been reached. Try querying a smaller time-frame to ensure all your data is displayed."
+          data-tip={`The display limit of ${numRows} rows has been reached. Try querying a smaller time-frame to ensure all your data is displayed.`}
           data-for="chart-element-tooltip"
         />
       )

@@ -189,7 +189,8 @@ export default class QueryOutput extends React.Component {
 
       // Determine the supported visualization types based on the response data
       this.setSupportedDisplayTypes(
-        getSupportedDisplayTypes(this.props.queryResponse)
+        getSupportedDisplayTypes(this.props.queryResponse),
+        true
       )
 
       // Set the initial display type based on prop value, response, and supported display types
@@ -736,7 +737,17 @@ export default class QueryOutput extends React.Component {
     this.forceUpdate()
   }
 
-  onChangeNumberColumnIndice = (indices) => {
+  onChangeNumberColumnIndices = (indices) => {
+    if (this.supportsPivot && this.pivotTableColumns) {
+      // Add "hidden" attribute to pivot table columns for charts
+      this.pivotTableColumns = this.pivotTableColumns.map((column, i) => {
+        return {
+          ...column,
+          numberColHidden: !indices.includes(i),
+        }
+      })
+    }
+
     if (indices) {
       this.dataConfig.numberColumnIndices = indices
       this.dataConfig.numberColumnIndex = indices[0]
@@ -776,18 +787,19 @@ export default class QueryOutput extends React.Component {
       const { numberColumnIndex, numberColumnIndices } = getNumberColumnIndices(
         columns
       )
+
       this.dataConfig.numberColumnIndices = numberColumnIndices
       this.dataConfig.numberColumnIndex = numberColumnIndex
     } else {
       this.dataConfig.numberColumnIndex = this.dataConfig.numberColumnIndices[0]
     }
-    this.dataConfig.seriesIndices = this.dataConfig.numberColumnIndices // do we still need this?
   }
 
-  setSupportedDisplayTypes = (supportedDisplayTypes) => {
+  setSupportedDisplayTypes = (supportedDisplayTypes, justMounted) => {
     if (
       supportedDisplayTypes &&
-      !_isEqual(supportedDisplayTypes, this.supportedDisplayTypes)
+      (justMounted ||
+        !_isEqual(supportedDisplayTypes, this.supportedDisplayTypes))
     ) {
       this.supportedDisplayTypes = supportedDisplayTypes
       this.props.onSupportedDisplayTypesChange(this.supportedDisplayTypes)
@@ -944,7 +956,7 @@ export default class QueryOutput extends React.Component {
       if (prevCategory !== category) {
         // make new row with original values
         const cells = makeEmptyArray(this.chartTableColumns.length, 1, 0)
-        cells[0] = category
+        cells[0] = categoryå
         newTableData.push(cells)
       }
 
@@ -982,7 +994,7 @@ export default class QueryOutput extends React.Component {
     uniqueCategories.forEach((category) => {
       newNumberColumns.push({
         ...columns[numberColumnIndex],
-        title: `${columns[numberColumnIndex].title} ${category}`,
+        title: category,
         seriesCategory: category,
       })
     })
@@ -1034,10 +1046,14 @@ export default class QueryOutput extends React.Component {
 
       if (this.supportsPivot) {
         stringIndex = 0
-        this.dataConfig.seriesIndices = this.pivotTableColumns.map(
-          (col, i) => i
-        )
-        this.dataConfig.seriesIndices.shift()
+        const newNumberColumnIndices = []
+        this.pivotTableColumns.forEach((col, i) => {
+          if (!col.numberColHidden && i !== stringIndex) {
+            newNumberColumnIndices.push(i)
+          }
+        })
+
+        this.dataConfig.numberColumnIndices = newNumberColumnIndices
       }
 
       if (this.isStringColumnDateType()) {
@@ -1049,7 +1065,7 @@ export default class QueryOutput extends React.Component {
           // Loop through columns and create a series for each
           const cells = []
 
-          this.dataConfig.seriesIndices.forEach((columnIndex, i) => {
+          this.dataConfig.numberColumnIndices.forEach((columnIndex, i) => {
             const value = row[columnIndex]
             const colorScaleValue = this.supportsPivot ? columnIndex : i
             const drilldownData = this.getDrilldownDataForCell(row, columnIndex)
@@ -1095,7 +1111,7 @@ export default class QueryOutput extends React.Component {
                 value: newValue,
                 tooltipData: this.getTooltipDataForCell(
                   row,
-                  this.dataConfig.seriesIndices[index],
+                  this.dataConfig.numberColumnIndices[index],
                   newValue
                 ),
               }
@@ -1747,7 +1763,7 @@ export default class QueryOutput extends React.Component {
           themeConfig={getThemeConfig(this.props.themeConfig)}
           changeStringColumnIndex={this.onChangeStringColumnIndex}
           changeLegendColumnIndex={this.onChangeLegendColumnIndex}
-          changeNumberColumnIndices={this.onChangeNumberColumnIndice}
+          changeNumberColumnIndices={this.onChangeNumberColumnIndices}
           onChartClick={this.onChartClick}
           isResizing={this.props.isResizing}
           enableDynamicCharting={this.props.enableDynamicCharting}
